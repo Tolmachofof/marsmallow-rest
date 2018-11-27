@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
+
 import re
 
 from marshmallow import fields
+from marshmallow.utils import get_value, missing
 
 
 class HateoasMixin(object):
@@ -29,26 +32,30 @@ class LinkField(HateoasMixin, fields.Field):
     
     _CHECK_ATTRIBUTE = False
     
-    def __init__(self, link, method='GET', title='', **kwargs):
-        self.link = link
+    def __init__(self, link_tpl, method='GET', title='', **kwargs):
+        self.link_tpl = link_tpl
         self.method = method
         self.title = title
         super(LinkField, self).__init__(**kwargs)
         
     def _serialize(self, value, attr, obj):
-        data = {'link': self.build_link(self.link, obj), 'method': self.method}
-        if self.title:
-            data.update({'title': self.title})
-        return data
+        return {
+            'href': self._render_link_tpl(obj, self.context),
+            'method': self.method,
+            'title': self.title
+        }
     
-    def build_link(self, link, obj):
-        for bound_attr in set(re.findall(r'<\w+>', link)):
+    def _render_link_tpl(self, obj, context):
+        link = self.link_tpl
+        for bound_attr in set(re.findall(r'<\w*>', link)):
             attr_name = bound_attr.strip('<>')
-            value = obj.get(attr_name) or self.context.get(attr_name)
-            if value is None:
+            value = get_value(attr_name, obj)
+            if value is missing:
+                value = context.get(attr_name, missing)
+            if value is missing:
                 raise AttributeError(
                     '{} is not a valid attribute of object: {},'
-                    ' context: {}'.format(attr_name, obj, self.context)
+                    ' context: {}'.format(bound_attr, obj, context)
                 )
             link = link.replace(bound_attr, str(value))
         return link
